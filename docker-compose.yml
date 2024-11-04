@@ -1,5 +1,3 @@
-version: '3.8'  # Add version if not specified
-
 services:
   db:
     image: mysql
@@ -9,7 +7,7 @@ services:
       # MYSQL_USER: ${MYSQL_USER}
       # MYSQL_PASSWORD: ${MYSQL_PASSWORD}
     ports:
-      - "3307:3306"  # Optional for host access; use internal port for internal connections
+      - "3307:3306"
     volumes:
       - mysql_data:/var/lib/mysql
 
