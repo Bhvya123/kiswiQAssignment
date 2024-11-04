@@ -98,10 +98,6 @@ class GraphRunConfig(Base):
     __tablename__ = "graph_run_configs"
     run_id = Column(String(250), primary_key=True)  # This is also the foreign key for the graph table
     config_data = Column(MySQLJSON, nullable=False, default={})  # Store serialized config data
-
-    # Relationship to graph
-    # graph = relationship("Graph", back_populates="run_config", uselist=False)
-
     def __repr__(self):
         return f"<GraphRunConfig(run_id={self.run_id}, config_data={self.config_data})>"
 

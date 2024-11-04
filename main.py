@@ -128,18 +128,11 @@ async def run_config(config: GraphRunConfig, db: Session = Depends(get_db)):
     graph = await fetch_graph(db)
     if validate(graph):
         run_id, graph_updated, topological_order, level_order, islands = run_graph(graph, config)
-        # topological_order = [node.serialize for node in topological_order]
-        print(graph_updated)
-        print(level_order)
-        print(topological_order)
-        print(islands)
-        
         serialized_config = config.serialize()
         new_run_config = GraphConfig(run_id=run_id, config_data=serialized_config)
         db.add(new_run_config)
         db.commit()
         print(f"Successfully added GraphRunConfig: {new_run_config}")
-            
         graph_entry = Graph(
             run_id=run_id,
             nodes=graph_updated.serialize(),
@@ -147,12 +140,11 @@ async def run_config(config: GraphRunConfig, db: Session = Depends(get_db)):
             level_order_traversal=level_order,
             islands=islands
         )
-        
         db.add(graph_entry)
         db.commit()
         db.refresh(graph_entry)
 
-        # Return the new graph entry details
+        # Returning the new graph entry details
         return {
             "run_id": graph_entry.run_id,
             "nodes": graph_entry.nodes,
