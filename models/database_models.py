@@ -35,21 +35,19 @@ class Graph(Base):
 class Node(Base):
     __tablename__ = "nodes"
     node_id = Column(String(50), primary_key=True, nullable=False)
-    data_in = Column(MySQLJSON, nullable=True, default={})  # Serialized incoming data
-    data_out = Column(MySQLJSON, nullable=True, default={})  # Serialized outgoing data
+    data_in = Column(MySQLJSON, nullable=True, default={})  
+    data_out = Column(MySQLJSON, nullable=True, default={})  
 
-    # New columns to store lists of edge IDs for incoming and outgoing edges
     paths_in = Column(MySQLJSON, nullable=True, default=[])
     paths_out = Column(MySQLJSON, nullable=True, default=[])
 
-    # Define relationships for outgoing and incoming edges
     outgoing_edges = relationship("Edge", back_populates="source_node", foreign_keys="Edge.src_node_id")
     incoming_edges = relationship("Edge", back_populates="destination_node", foreign_keys="Edge.dst_node_id")
    
     def to_data(self) -> NodeData:
         """Convert ORM Node to dataclass Node."""
-        paths_in_ids = [edge.id for edge in self.incoming_edges]  # Get IDs of incoming edges
-        paths_out_ids = [edge.id for edge in self.outgoing_edges]  # Get IDs of outgoing edges
+        paths_in_ids = [edge.id for edge in self.incoming_edges]  
+        paths_out_ids = [edge.id for edge in self.outgoing_edges] 
 
         return NodeData(
             node_id=self.node_id,
@@ -64,8 +62,6 @@ class Node(Base):
         self.node_id = node_data.node_id
         self.data_in = node_data.data_in
         self.data_out = node_data.data_out
-
-        # Set `paths_in` and `paths_out` lists with IDs
         self.paths_in = [edge.id for edge in node_data.paths_in]
         self.paths_out = [edge.id for edge in node_data.paths_out]
 
@@ -76,7 +72,6 @@ class Edge(Base):
     dst_node_id = Column(String(50), ForeignKey("nodes.node_id"), nullable=False)
     src_to_dst_data_keys = Column(MySQLJSON, nullable=False, default={})
 
-    # Relationships to nodes
     source_node = relationship("Node", back_populates="outgoing_edges", foreign_keys=[src_node_id])
     destination_node = relationship("Node", back_populates="incoming_edges", foreign_keys=[dst_node_id])
     
@@ -96,8 +91,8 @@ class Edge(Base):
 
 class GraphRunConfig(Base):
     __tablename__ = "graph_run_configs"
-    run_id = Column(String(250), primary_key=True)  # This is also the foreign key for the graph table
-    config_data = Column(MySQLJSON, nullable=False, default={})  # Store serialized config data
+    run_id = Column(String(250), primary_key=True) 
+    config_data = Column(MySQLJSON, nullable=False, default={})
     def __repr__(self):
         return f"<GraphRunConfig(run_id={self.run_id}, config_data={self.config_data})>"
 
@@ -127,32 +122,26 @@ def update_node_paths_on_delete(mapper, connection, target):
     dst_node_id = target.dst_node_id
     edge_id = target.id
 
-    # Start a session
     Session = sessionmaker(bind=connection)
     session = Session()
 
     try:
-        # Remove edge_id from paths_out for src_node_id
         index_query = select(func.JSON_SEARCH(Node.paths_out, 'one', edge_id)).where(Node.node_id == src_node_id)
         index_result = session.execute(index_query).scalar()
         print(f"Index in paths_out for {src_node_id}: {index_result}")
 
         if index_result is not None:
-            # Use the found index to remove the edge_id safely
             connection.execute(
                 update(Node)
                 .where(Node.node_id == src_node_id)
                 .values(paths_out=func.JSON_REMOVE(Node.paths_out, index_result))
             )
             print(f"Updated paths_out for {src_node_id}")
-
-        # Remove edge_id from paths_in for dst_node_id
         index_query = select(func.JSON_SEARCH(Node.paths_in, 'one', edge_id)).where(Node.node_id == dst_node_id)
         index_result = session.execute(index_query).scalar()
         print(f"Index in paths_in for {dst_node_id}: {index_result}")
 
         if index_result is not None:
-            # Use the found index to remove the edge_id safely
             connection.execute(
                 update(Node)
                 .where(Node.node_id == dst_node_id)
@@ -160,14 +149,11 @@ def update_node_paths_on_delete(mapper, connection, target):
             )
             print(f"Updated paths_in for {dst_node_id}")
 
-        # Cleanup: Remove any stale edge IDs that don't exist in the edges table
         existing_edges = session.execute(select(Edge.id)).scalars().all()
         print(f"Existing edges in DB: {existing_edges}")
 
-        # Clean up paths_out for all nodes
         for node in session.query(Node).all():
             current_paths_out = node.paths_out
-            # Only remove edge IDs that are not in the existing_edges
             updated_paths_out = [edge for edge in current_paths_out if edge in existing_edges]
             connection.execute(
                 update(Node)
@@ -175,10 +161,8 @@ def update_node_paths_on_delete(mapper, connection, target):
                 .values(paths_out=updated_paths_out)
             )
 
-        # Clean up paths_in for all nodes
         for node in session.query(Node).all():
             current_paths_in = node.paths_in
-            # Only remove edge IDs that are not in the existing_edges
             updated_paths_in = [edge for edge in current_paths_in if edge in existing_edges]
             connection.execute(
                 update(Node)
@@ -186,11 +170,9 @@ def update_node_paths_on_delete(mapper, connection, target):
                 .values(paths_in=updated_paths_in)
             )
 
-        # Commit the session if necessary
         session.commit()
 
     except SQLAlchemyError as e:
-        # Handle exceptions
         session.rollback()
         print(f"Error: {str(e)}")
     finally:

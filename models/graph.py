@@ -47,7 +47,7 @@ class Node:
     
 @dataclass
 class Graph:
-    nodes: List[Node]   # List of enabled nodes in the graph.
+    nodes: List[Node] 
     
     def serialize(self) -> Dict[str, Any]:
         return {
