@@ -16,7 +16,7 @@ Base = declarative_base()
 
 # Load MySQL credentials from environment variables
 USER = "root"
-PASSWORD = "Meticulous%4013"
+PASSWORD = "Met%40123"
 HOST = "mysql-container"
 PORT = "3306"
 DATABASE = "gb"

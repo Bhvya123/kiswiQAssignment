@@ -1,5 +1,5 @@
 import requests
-from backend.models.graph import Graph as GraphData, Node as NodeData, Edge as EdgeData, GraphRunConfig
+from models.graph import Graph as GraphData, Node as NodeData, Edge as EdgeData, GraphRunConfig
 
 # Define the base URL for the API
 base_url = "http://127.0.0.1:8000"
