@@ -2,6 +2,4 @@ fastapi
 uvicorn[standard]
 pydantic
 sqlalchemy
-mysql-connector-python
-mysqlclient
 pymysql

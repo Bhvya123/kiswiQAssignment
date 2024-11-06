@@ -18,6 +18,7 @@ DATABASE_URL = f"mysql://{USER}:{PASSWORD}@localhost/{DATABASE}"
 
 engine = create_engine(DATABASE_URL)
 
+# Graph Table to store run results for provided graph configs
 class Graph(Base):
     __tablename__ = "graphs"
     id = Column(Integer, primary_key=True, autoincrement=True)
@@ -25,19 +26,19 @@ class Graph(Base):
     run_id = Column(String(250), ForeignKey("graph_run_configs.run_id"), unique=True, nullable=False)  # Foreign key reference to Run
     toposort = Column(MySQLJSON, nullable=True, default=[])  # Store topological sorting results
     level_order_traversal = Column(MySQLJSON, nullable=True, default=[])  # Store level order traversal results
-    islands = Column(MySQLJSON, nullable=True, default=[])  # Store number of islands in the graph
-
-    # run_config = relationship("GraphRunConfig", back_populates="graph", uselist=False)
+    leaf_nodes = Column(MySQLJSON, default=[]) # Store leaf_nodes for easy access
     
     def __repr__(self):
         return f"<Graph(id={self.id}, run_id={self.run_id}, number_of_islands={self.number_of_islands})>"
-        
+
+# Node table which will store the nodes
 class Node(Base):
     __tablename__ = "nodes"
     node_id = Column(String(50), primary_key=True, nullable=False)
     data_in = Column(MySQLJSON, nullable=True, default={})  
-    data_out = Column(MySQLJSON, nullable=True, default={})  
-
+    data_out = Column(MySQLJSON, nullable=True, default={}) 
+    mapping = Column(MySQLJSON, nullable=True, default={})
+    
     paths_in = Column(MySQLJSON, nullable=True, default=[])
     paths_out = Column(MySQLJSON, nullable=True, default=[])
 
@@ -53,6 +54,7 @@ class Node(Base):
             node_id=self.node_id,
             data_in=self.data_in,
             data_out=self.data_out,
+            mapping=self.mapping,
             paths_in=paths_in_ids,
             paths_out=paths_out_ids
         )
@@ -62,9 +64,11 @@ class Node(Base):
         self.node_id = node_data.node_id
         self.data_in = node_data.data_in
         self.data_out = node_data.data_out
+        self.mapping = node_data.mapping
         self.paths_in = [edge.id for edge in node_data.paths_in]
         self.paths_out = [edge.id for edge in node_data.paths_out]
 
+# Edge table to store edges
 class Edge(Base):
     __tablename__ = "edges"
     id = Column(Integer, primary_key=True, autoincrement=True)
@@ -89,6 +93,7 @@ class Edge(Base):
         self.dst_node_id = edge_data.dst_node
         self.src_to_dst_data_keys = edge_data.src_to_dst_data_keys
 
+# Config table to store configs run
 class GraphRunConfig(Base):
     __tablename__ = "graph_run_configs"
     run_id = Column(String(250), primary_key=True) 
@@ -96,7 +101,14 @@ class GraphRunConfig(Base):
     def __repr__(self):
         return f"<GraphRunConfig(run_id={self.run_id}, config_data={self.config_data})>"
 
-# Defining listeners for automatic database updates on different CRUD api calls
+# Table to optimize the search for node output based on run_id
+class RunNodes(Base):
+    __tablename__="graph_nodes"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    node_ids = Column(String(50), nullable=False)
+    run_id = Column(MySQLJSON, nullable=False, default={})
+
+# Listener for updating node paths after edge insertion in database
 @event.listens_for(Edge, 'after_insert')
 def update_node_paths_on_insert(mapper, connection, target):
     """Automatically update paths_in and paths_out in nodes when a new edge is inserted."""
@@ -115,6 +127,7 @@ def update_node_paths_on_insert(mapper, connection, target):
         .values(paths_in=func.JSON_ARRAY_APPEND(Node.paths_in, '$', edge_id))
     )
 
+# Listener for updating node paths after edge deletion from database
 @event.listens_for(Edge, 'after_delete')
 def update_node_paths_on_delete(mapper, connection, target):
     """Automatically update paths_in and paths_out in nodes when an edge is deleted."""
@@ -178,14 +191,22 @@ def update_node_paths_on_delete(mapper, connection, target):
     finally:
         session.close()
 
+# Listener for deleting corresponding edges after deletion of node 
 @event.listens_for(Node, 'after_delete')
 def update_edge_after_delete(mapper, connection, target):
     session = Session(bind=connection)
-    for edge in target.paths_in:
-        session.delete(edge)
-    for edge in target.paths_out:
-        session.delete(edge)
+    # Iterate over paths_in and paths_out, fetching and deleting the actual Edge instances
+    for edge_id in target.paths_in:
+        edge_instance = session.query(Edge).get(edge_id)
+        if edge_instance:
+            session.delete(edge_instance)
+    for edge_id in target.paths_out:
+        edge_instance = session.query(Edge).get(edge_id)
+        if edge_instance:
+            session.delete(edge_instance)
     session.commit()
+    session.close()
+    
 
 Base.metadata.drop_all(bind=engine)
 Base.metadata.create_all(bind=engine)
@@ -193,20 +214,32 @@ Base.metadata.create_all(bind=engine)
 Session = sessionmaker(bind=engine)
 session = Session()
 
+def update_node_mapping(node_id: str, data_in, data_out, db):
+    node = db.query(Node).filter(Node.node_id == node_id).first()
+    node.data_in = data_in
+    node.data_out = data_out
+    db.commit()
+    db.refresh(node)
+    return
+
+# Populating with sample data
 nodes_data = [
-    {"node_id": "node1", "data_in": {"input1": 0}, "data_out": {"output1": 10}},
-    {"node_id": "node2", "data_in": {"input2": 0}, "data_out": {"output2": 20}},
-    {"node_id": "node3", "data_in": {"input3": 0}, "data_out": {"output3": 30}},
-    {"node_id": "node4", "data_in": {"input4": 0}, "data_out": {"output4": 40}},
-    {"node_id": "node5", "data_in": {"input5": 0}, "data_out": {"output5": 50}},
-    {"node_id": "node6", "data_in": {"input6": 0}, "data_out": {"output6": 60}},
-    {"node_id": "node7", "data_in": {"input7": 0}, "data_out": {"output7": 70}},
-    {"node_id": "node8", "data_in": {"input8": 0}, "data_out": {"output8": 80}},
-    {"node_id": "node9", "data_in": {"input9": 0}, "data_out": {"output9": 90}},
-    {"node_id": "node10", "data_in": {"input10": 0}, "data_out": {"output10": 100}},
+    {"node_id": "node0", "data_in": {"input0": "0, int"}, "data_out": {"output0": "0, int"}, "mapping": {"input0": "output0"}},
+    {"node_id": "node1", "data_in": {"input1": "0, int"}, "data_out": {"output1": "0, int"}, "mapping": {"input1": "output1"}},
+    {"node_id": "node2", "data_in": {"input2": "0, int"}, "data_out": {"output2": "0, int"}, "mapping": {"input2": "output2"}},
+    {"node_id": "node3", "data_in": {"input3": "0, int"}, "data_out": {"output3": "0, int"}, "mapping": {"input3": "output3"}},
+    {"node_id": "node4", "data_in": {"input4": "0, int"}, "data_out": {"output4": "0, int"}, "mapping": {"input4": "output4"}},
+    {"node_id": "node5", "data_in": {"input5": "0, int"}, "data_out": {"output5": "0, int"}, "mapping": {"input5": "output5"}},
+    {"node_id": "node6", "data_in": {"input6": "0, int"}, "data_out": {"output6": "0, int"}, "mapping": {"input6": "output6"}},
+    {"node_id": "node7", "data_in": {"input7": "0, int"}, "data_out": {"output7": "0, int"}, "mapping": {"input7": "output7"}},
+    {"node_id": "node8", "data_in": {"input8": "0, int"}, "data_out": {"output8": "0, int"}, "mapping": {"input8": "output8"}},
+    {"node_id": "node9", "data_in": {"input9": "0, int"}, "data_out": {"output9": "0, int"}, "mapping": {"input9": "output9"}},
+    {"node_id": "node10", "data_in": {"input10": "0, int"}, "data_out": {"output10": "0, int"}, "mapping": {"input10": "output10"}},
+    {"node_id": "node11", "data_in": {"input11": "0, int"}, "data_out": {"output11": "0, int"}, "mapping": {"input11": "output11"}},
 ]
 
 edges_data = [
+    # {"src_node": "node0", "dst_node": "node1", "src_to_dst_data_keys": {"output0": "input1"}},
     {"src_node": "node1", "dst_node": "node2", "src_to_dst_data_keys": {"output1": "input2"}},
     {"src_node": "node2", "dst_node": "node3", "src_to_dst_data_keys": {"output2": "input3"}},
     {"src_node": "node3", "dst_node": "node4", "src_to_dst_data_keys": {"output3": "input4"}},
@@ -216,7 +249,11 @@ edges_data = [
     {"src_node": "node7", "dst_node": "node8", "src_to_dst_data_keys": {"output7": "input8"}},
     {"src_node": "node8", "dst_node": "node9", "src_to_dst_data_keys": {"output8": "input9"}},
     {"src_node": "node9", "dst_node": "node10", "src_to_dst_data_keys": {"output9": "input10"}},
-    {"src_node": "node1","dst_node": "node10", "src_to_dst_data_keys": {}}  # Example of a dependency edge without data transfer
+    {"src_node": "node1", "dst_node": "node11", "src_to_dst_data_keys": {"output1": "input11"}},
+    {"src_node": "node11", "dst_node": "node10", "src_to_dst_data_keys": {"output11": "input10"}},
+    {"src_node": "node0", "dst_node": "node10", "src_to_dst_data_keys": {"output0": "input10"}},
+    {"src_node": "node1", "dst_node": "node3", "src_to_dst_data_keys": {"output1": "input3"}},
+    {"src_node": "node1", "dst_node": "node10", "src_to_dst_data_keys": {"output1": "input10"}},
 ]
 
 for node_data in nodes_data:
