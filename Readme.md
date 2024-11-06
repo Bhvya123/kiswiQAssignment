@@ -249,25 +249,54 @@ These algorithms ensure efficient graph validation, traversal, and processing, w
 
 ### Setup
 
-1. Clone the repository and navigate to the project directory.
-2. Install the dependencies:
+1. **Create a Docker Network**
+
+   This network will allow containers to communicate with each other.
+
    ```bash
-   pip install fastapi sqlalchemy mysql-connector-python
-   ```
-3. Set up MySQL and create the required tables using SQLAlchemy models.
-4. Start the FastAPI server:
-   ```bash
-   uvicorn main:app --reload
+   docker network create my-network
    ```
 
-### Database Connection
+2. **Build the Docker Image for the Application**
 
-- Configure the MySQL connection string in `config.py` as per your database setup.
+   Build the Docker image with a specified tag (e.g., `myapp:1.0.0`).
 
-### Testing the API
+   ```bash
+   docker buildx build -t myapp:1.0.0 .
+   ```
 
-- Use tools like `curl` or `Postman` to interact with the API endpoints and verify functionality.
+3. **Run the MySQL Container**
 
-## License
+   Start a MySQL container within the same network. Replace `{RootPassword}` with your desired root password.
 
-This project is licensed under the MIT License.
+   ```bash
+   docker run --name mysql-container --network my-network -e MYSQL_ROOT_PASSWORD={RootPassword} -d mysql:latest
+   ```
+
+4. **Create the Application Database**
+
+   Exec into the MySQL container to create the required database (e.g., `gb`).
+
+   ```bash
+   docker exec -it mysql-container mysql -u root -p
+   ```
+
+   Once inside the MySQL shell, run:
+
+   ```sql
+   CREATE DATABASE gb;
+   ```
+
+5. **Run the Application Container**
+
+   Start the application container, exposing it on port `8000` and connecting it to `my-network`.
+
+   ```bash
+   docker run --name myapp-container -p 8000:8000 --network my-network myapp:1.0.0
+   ```
+
+   Make sure to setup HOST, USERNAME, PASSWORD, PORT and DATABASE in config.py as well as database_models.py files.
+
+6. **Test API EndPoints**
+
+   Using the hitter.py script, to test every end-point via using requests library in python. 

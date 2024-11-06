@@ -7,14 +7,22 @@ from sqlalchemy.orm import declarative_base
 from sqlalchemy.dialects.mysql import JSON as MySQLJSON
 from .graph import Node as NodeData, Edge as EdgeData, GraphRunConfig
 from sqlalchemy import create_engine
+import os
+from dotenv import load_dotenv
 from sqlalchemy.orm import sessionmaker
 
+load_dotenv() 
 Base = declarative_base()
 
+# Load MySQL credentials from environment variables
 USER = "root"
 PASSWORD = "Meticulous%4013"
+HOST = "mysql-container"
+PORT = "3306"
 DATABASE = "gb"
-DATABASE_URL = f"mysql://{USER}:{PASSWORD}@localhost/{DATABASE}"
+
+# Update the database URL to use the HOST and PORT from Docker environment variables
+DATABASE_URL = f"mysql://{USER}:{PASSWORD}@{HOST}:{PORT}/{DATABASE}"
 
 engine = create_engine(DATABASE_URL)
 
